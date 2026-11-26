@@ -31,6 +31,10 @@ typedef struct host_state {
     time_t last_mtime;
     uint32_t reload_count;
 
+    Font ui_font;
+    bool custom_font;
+    double js_ms_avg;
+
     zqjs_runtime *rt;
     zqjs_program *prog;
     zqjs_handle update_fn;
@@ -170,7 +174,11 @@ static zqjs_status native_draw_circle(
     if (arg_num_opt(rt, args, argc, 6, 255.0, &a) != ZQJS_OK) return ZQJS_ERR_THROWN;
     h->draw_calls++;
     if (!h->headless) {
-        DrawCircle((int)x, (int)y, (float)rad, (Color){ clamp_u8(r), clamp_u8(g), clamp_u8(b), clamp_u8(a) });
+        DrawCircleV(
+            (Vector2){ (float)x, (float)y },
+            (float)rad,
+            (Color){ clamp_u8(r), clamp_u8(g), clamp_u8(b), clamp_u8(a) }
+        );
     }
     return ZQJS_OK;
 }
@@ -191,7 +199,17 @@ static zqjs_status native_draw_ring(
     if (arg_num_opt(rt, args, argc, 6, 255.0, &a) != ZQJS_OK) return ZQJS_ERR_THROWN;
     h->draw_calls++;
     if (!h->headless) {
-        DrawCircleLines((int)x, (int)y, (float)rad, (Color){ clamp_u8(r), clamp_u8(g), clamp_u8(b), clamp_u8(a) });
+        float outer = (float)rad;
+        float inner = outer > 2.0f ? outer - 2.0f : 0.0f;
+        DrawRing(
+            (Vector2){ (float)x, (float)y },
+            inner,
+            outer,
+            0.0f,
+            360.0f,
+            64,
+            (Color){ clamp_u8(r), clamp_u8(g), clamp_u8(b), clamp_u8(a) }
+        );
     }
     return ZQJS_OK;
 }
@@ -235,9 +253,44 @@ static zqjs_status native_draw_line(
     if (arg_num_opt(rt, args, argc, 7, 255.0, &a) != ZQJS_OK) return ZQJS_ERR_THROWN;
     h->draw_calls++;
     if (!h->headless) {
-        DrawLine((int)x1, (int)y1, (int)x2, (int)y2, (Color){ clamp_u8(r), clamp_u8(g), clamp_u8(b), clamp_u8(a) });
+        DrawLineEx(
+            (Vector2){ (float)x1, (float)y1 },
+            (Vector2){ (float)x2, (float)y2 },
+            1.5f,
+            (Color){ clamp_u8(r), clamp_u8(g), clamp_u8(b), clamp_u8(a) }
+        );
     }
     return ZQJS_OK;
+}
+
+static void draw_ui_text(const host_state *h, const char *text, float x, float y, float sz, Color col) {
+    if (h->custom_font) {
+        DrawTextEx(h->ui_font, text, (Vector2){ x, y }, sz, 0.5f, col);
+    } else {
+        DrawText(text, (int)x, (int)y, (int)sz, col);
+    }
+}
+
+static void init_ui_font(host_state *h) {
+    const char *candidates[] = {
+        "/System/Library/Fonts/SFNSMono.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+    };
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+        if (FileExists(candidates[i])) {
+            Font f = LoadFontEx(candidates[i], 40, NULL, 0);
+            if (f.texture.id != 0) {
+                SetTextureFilter(f.texture, TEXTURE_FILTER_BILINEAR);
+                h->ui_font = f;
+                h->custom_font = true;
+                return;
+            }
+        }
+    }
+    h->ui_font = GetFontDefault();
+    h->custom_font = false;
 }
 
 static zqjs_status native_draw_text(
@@ -268,7 +321,7 @@ static zqjs_status native_draw_text(
 
     h->draw_calls++;
     if (!h->headless) {
-        DrawText(text, (int)x, (int)y, (int)sz, (Color){ clamp_u8(r), clamp_u8(g), clamp_u8(b), 255 });
+        draw_ui_text(h, text, (float)x, (float)y, (float)sz, (Color){ clamp_u8(r), clamp_u8(g), clamp_u8(b), 255 });
     }
     return ZQJS_OK;
 }
@@ -494,26 +547,28 @@ static void draw_status_footer(const host_state *h) {
     char bar[256];
     snprintf(
         bar, sizeof(bar),
-        "zqjs  |  %s  |  reloads: %u  |  heap: %.0f KB (gc: %llu)  |  %d FPS",
+        "zqjs  |  %s  |  reloads: %u  |  heap: %.0f KB (gc: %llu)  |  js: %.2f ms  |  %d FPS",
         h->script_path,
         h->reload_count,
         (double)mem.heap_bytes / 1024.0,
         (unsigned long long)mem.collections,
+        h->js_ms_avg,
         GetFPS()
     );
-    DrawText(bar, 16, WIN_H - 29, 20, (Color){ 215, 228, 248, 255 });
+    draw_ui_text(h, bar, 16.0f, (float)(WIN_H - 28), 18.0f, (Color){ 215, 228, 248, 255 });
 }
 
 static void draw_error_overlay(const host_state *h) {
     ClearBackground((Color){ 28, 12, 18, 255 });
     DrawRectangle(40, 80, WIN_W - 80, WIN_H - 170, (Color){ 46, 18, 26, 255 });
     DrawRectangleLines(40, 80, WIN_W - 80, WIN_H - 170, (Color){ 240, 86, 108, 255 });
-    DrawText("SCRIPT PAUSED - HOST STILL ALIVE", 66, 108, 30, (Color){ 255, 120, 138, 255 });
-    DrawText(h->error_title, 66, 158, 20, (Color){ 255, 215, 130, 255 });
-    DrawText(h->error_detail, 66, 198, 20, (Color){ 240, 240, 245, 255 });
-    DrawText(
+    draw_ui_text(h, "SCRIPT PAUSED - HOST STILL ALIVE", 66.0f, 108.0f, 26.0f, (Color){ 255, 120, 138, 255 });
+    draw_ui_text(h, h->error_title, 66.0f, 156.0f, 20.0f, (Color){ 255, 215, 130, 255 });
+    draw_ui_text(h, h->error_detail, 66.0f, 196.0f, 18.0f, (Color){ 240, 240, 245, 255 });
+    draw_ui_text(
+        h,
         "Edit & save game.js (auto hot-reload) or press R to retry.",
-        66, WIN_H - 136, 20, (Color){ 180, 205, 245, 255 }
+        66.0f, (float)(WIN_H - 134), 18.0f, (Color){ 180, 205, 245, 255 }
     );
 }
 
@@ -608,8 +663,9 @@ int main(int argc, char **argv) {
     h.script_path = script_path;
     (void)host_reload_file(&h);
 
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+    SetConfigFlags(FLAG_WINDOW_HIGHDPI | FLAG_MSAA_4X_HINT);
     InitWindow(WIN_W, WIN_H, "zqjs + Raylib - Live Hot-Reload JS Sandbox");
+    init_ui_font(&h);
 
     double watch_accum = 0.0;
     while (!WindowShouldClose()) {
@@ -631,13 +687,17 @@ int main(int argc, char **argv) {
         if (h.has_error) {
             draw_error_overlay(&h);
         } else {
-            (void)host_step_frame(&h, dt, GetTime());
+            double t0 = GetTime();
+            (void)host_step_frame(&h, dt, t0);
+            double js_ms = (GetTime() - t0) * 1000.0;
+            h.js_ms_avg = h.js_ms_avg == 0.0 ? js_ms : (h.js_ms_avg * 0.92 + js_ms * 0.08);
             if (h.has_error) draw_error_overlay(&h);
         }
         draw_status_footer(&h);
         EndDrawing();
     }
 
+    if (h.custom_font) UnloadFont(h.ui_font);
     CloseWindow();
     host_unload(&h);
     return 0;
