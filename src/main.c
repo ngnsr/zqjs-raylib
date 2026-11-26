@@ -485,7 +485,8 @@ static zqjs_status host_step_frame(host_state *h, double dt, double elapsed) {
 }
 
 static void draw_status_footer(const host_state *h) {
-    DrawRectangle(0, WIN_H - 32, WIN_W, 32, (Color){ 10, 14, 24, 240 });
+    DrawRectangle(0, WIN_H - 38, WIN_W, 38, (Color){ 10, 14, 24, 248 });
+    DrawLine(0, WIN_H - 38, WIN_W, WIN_H - 38, (Color){ 42, 56, 86, 255 });
     zqjs_memory mem;
     memset(&mem, 0, sizeof(mem));
     if (h->rt != NULL) (void)zqjs_runtime_memory(h->rt, &mem);
@@ -493,26 +494,26 @@ static void draw_status_footer(const host_state *h) {
     char bar[256];
     snprintf(
         bar, sizeof(bar),
-        "zqjs v0.1.0  |  script: %s  |  reloads: %u  |  heap: %.1f KB (gc: %llu)  |  %d FPS",
+        "zqjs  |  %s  |  reloads: %u  |  heap: %.0f KB (gc: %llu)  |  %d FPS",
         h->script_path,
         h->reload_count,
         (double)mem.heap_bytes / 1024.0,
         (unsigned long long)mem.collections,
         GetFPS()
     );
-    DrawText(bar, 14, WIN_H - 23, 15, (Color){ 145, 165, 200, 255 });
+    DrawText(bar, 16, WIN_H - 29, 20, (Color){ 215, 228, 248, 255 });
 }
 
 static void draw_error_overlay(const host_state *h) {
     ClearBackground((Color){ 28, 12, 18, 255 });
     DrawRectangle(40, 80, WIN_W - 80, WIN_H - 170, (Color){ 46, 18, 26, 255 });
     DrawRectangleLines(40, 80, WIN_W - 80, WIN_H - 170, (Color){ 240, 86, 108, 255 });
-    DrawText("SCRIPT PAUSED — HOST STILL ALIVE", 66, 108, 24, (Color){ 255, 120, 138, 255 });
-    DrawText(h->error_title, 66, 152, 20, (Color){ 255, 215, 130, 255 });
-    DrawText(h->error_detail, 66, 190, 17, (Color){ 240, 240, 245, 255 });
+    DrawText("SCRIPT PAUSED - HOST STILL ALIVE", 66, 108, 30, (Color){ 255, 120, 138, 255 });
+    DrawText(h->error_title, 66, 158, 20, (Color){ 255, 215, 130, 255 });
+    DrawText(h->error_detail, 66, 198, 20, (Color){ 240, 240, 245, 255 });
     DrawText(
-        "Edit and save game.js (auto hot-reload) or press R to retry.",
-        66, WIN_H - 132, 17, (Color){ 180, 205, 245, 255 }
+        "Edit & save game.js (auto hot-reload) or press R to retry.",
+        66, WIN_H - 136, 20, (Color){ 180, 205, 245, 255 }
     );
 }
 
@@ -607,8 +608,8 @@ int main(int argc, char **argv) {
     h.script_path = script_path;
     (void)host_reload_file(&h);
 
-    InitWindow(WIN_W, WIN_H, "zqjs + Raylib — Live Hot-Reload JS Sandbox");
-    SetTargetFPS(60);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+    InitWindow(WIN_W, WIN_H, "zqjs + Raylib - Live Hot-Reload JS Sandbox");
 
     double watch_accum = 0.0;
     while (!WindowShouldClose()) {

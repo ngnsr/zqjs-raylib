@@ -9,9 +9,9 @@
 
 const CONFIG = {
   orbCount: 36,
-  playerSpeed: 290,
-  gravity: 26000,
-  burstForce: 340,
+  playerSpeed: 310,
+  gravity: 1100,
+  burstForce: 420,
   orbSpeed: 130,
   bg: [13, 17, 28],
 };
@@ -27,7 +27,7 @@ const PALETTE = [
 const W = 900;
 const H = 560;
 const TOP_BAR = 44;
-const BOT_BAR = 32;
+const BOT_BAR = 38;
 
 const player = {
   x: W * 0.5,
@@ -123,17 +123,25 @@ function update(input) {
     if (well.active) {
       const dx = well.x - o.x;
       const dy = well.y - o.y;
-      const distSq = dx * dx + dy * dy + 900;
-      const pull = (CONFIG.gravity / distSq) * dt;
-      const d = Math.sqrt(distSq);
-      o.vx += (dx / d) * pull;
-      o.vy += (dy / d) * pull;
+      const d = Math.hypot(dx, dy) + 1;
+      const falloff = 1 / (1 + d / 260);
+      const accel = CONFIG.gravity * falloff * dt;
+      // Pull inward + slight tangential swirl so orbs orbit instead of clumping flat
+      const nx = dx / d;
+      const ny = dy / d;
+      o.vx += (nx * accel) + (-ny * accel * 0.25);
+      o.vy += (ny * accel) + (nx * accel * 0.25);
     }
 
-    // Mild damping so velocities stay lively but bounded
-    const drag = 1 - 0.15 * dt;
+    // Mild damping + speed cap so orbits stay energetic and controllable
+    const drag = 1 - 0.35 * dt;
     o.vx *= drag;
     o.vy *= drag;
+    const spd = Math.hypot(o.vx, o.vy);
+    if (spd > 520) {
+      o.vx = (o.vx / spd) * 520;
+      o.vy = (o.vy / spd) * 520;
+    }
     o.x += o.vx * dt;
     o.y += o.vy * dt;
 
@@ -184,10 +192,19 @@ function draw() {
     }
   }
 
-  // Gravity well indicator
+  // Gravity well indicator + pull tethers
   if (well.active) {
-    drawRing(well.x, well.y, 34, 120, 210, 255, 160);
-    drawCircle(well.x, well.y, 6, 180, 235, 255, 220);
+    for (let i = 0; i < orbs.length; i++) {
+      const o = orbs[i];
+      const dx = well.x - o.x;
+      const dy = well.y - o.y;
+      if (dx * dx + dy * dy < 90000) {
+        drawLine(well.x, well.y, o.x, o.y, 110, 200, 255, 55);
+      }
+    }
+    drawRing(well.x, well.y, 44, 120, 210, 255, 110);
+    drawRing(well.x, well.y, 24, 160, 230, 255, 190);
+    drawCircle(well.x, well.y, 6, 210, 245, 255, 240);
   }
 
   // Orbs
@@ -212,17 +229,10 @@ function draw() {
   drawCircle(player.x, player.y, player.r + 5, 255, 255, 255, 40);
   drawCircle(player.x, player.y, player.r, 245, 250, 255, 255);
 
-  // Top HUD bar
-  drawRect(0, 0, W, TOP_BAR, 18, 24, 40, 235);
-  drawText(
-    `SCORE: ${player.score}   ORBS: ${orbs.length}   |   WASD: move   SPACE: pulse   CLICK: gravity   R: reload`,
-    16,
-    14,
-    16,
-    220,
-    232,
-    255
-  );
+  // Top HUD bar (20px = 2x Raylib's crisp 10px default font)
+  drawRect(0, 0, W, TOP_BAR, 18, 24, 40, 245);
+  drawText(`SCORE: ${player.score}   ORBS: ${orbs.length}`, 16, 12, 20, 235, 244, 255);
+  drawText("WASD: move  SPACE: pulse  CLICK: gravity  R: reload", 320, 12, 20, 155, 180, 220);
 }
 
 registerGame({ update, draw });
