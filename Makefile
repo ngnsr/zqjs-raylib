@@ -20,17 +20,17 @@ ZQJS_LIB := $(ZQJS_DIR)/zig-out/lib/libzqjs.a
 all: build/zqjs-raylib
 
 zqjs:
-	cd $(ZQJS_DIR) && zig build -Doptimize=ReleaseSafe
+	cd $(ZQJS_DIR) && zig build -Doptimize=ReleaseFast
 
 build/zqjs-raylib: src/main.c | zqjs
 	@mkdir -p build
 	$(CC) $(CFLAGS) -I$(ZQJS_INC) $(RAYLIB_CFLAGS) src/main.c $(ZQJS_LIB) $(RAYLIB_LIBS) -lpthread -lm -o $@
 
 run: build/zqjs-raylib
-	./build/zqjs-raylib
+	./build/zqjs-raylib game.js
 
 smoke: build/zqjs-raylib
-	./build/zqjs-raylib --frames 60 --verify-errors
+	./build/zqjs-raylib --smoke game.js
 
 clean:
 	rm -rf build
